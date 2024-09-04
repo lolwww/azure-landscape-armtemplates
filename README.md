@@ -8,7 +8,10 @@ Installs Landscape on VM with Public IP on it's NIC and Network security group w
 Usage:
 
 Deploy (for now) with:
+
 https://portal.azure.com/#create/Microsoft.Template
+
+Then click "build template in the editor"
 
 Available params:
 
