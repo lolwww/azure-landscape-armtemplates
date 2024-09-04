@@ -1,0 +1,240 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vmSize": {
+        "type": "string",
+        "defaultValue": "Standard_DS2_v2",
+        "allowedValues": [
+            "Standard_D2s_v3",
+            "Standard_D4s_v3",
+            "Standard_D8s_v3",
+            "Standard_D16s_v3",
+            "Standard_D32s_v3"
+        ]
+    },
+        "vmName": {
+            "defaultValue": "LandscapeServerVM",
+            "type": "string",
+            "metadata": {
+                "description": "Landscape Server VM name"
+            }
+        },
+        "dnsPrefix": {
+            "type": "string",
+            "metadata": {
+                "description": "Unique DNS Name for the Public IP used to access the VM"
+                }
+        },
+        "adminUsername": {
+            "defaultValue": "azureuser",
+            "type": "string",
+            "metadata": {
+                "description": "Admin username for the VM"
+            }
+        },
+        "vnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Virtual Network to place VM to"
+            }
+        },
+        "vSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Subnet Network to place VM to"
+            }
+        },
+        "sshPublicKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH public key for the virtual machine"
+            }
+        }
+    },
+    "variables": {
+        "fileLink": "https://raw.githubusercontent.com/canonical/landscape-scripts/main/provisioning/cloud-init-quickstart.yaml"
+    },
+    "resources": [
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2020-10-01",
+      "name": "[concat(parameters('vmName'), 'ComposeCloudInitFile')]",
+      "location": "[resourceGroup().location]",
+      "kind": "AzureCLI",
+      "properties": {
+        "environmentVariables": [
+            {
+                "name": "HOSTNAME",
+                "value": "[parameters('dnsPrefix')]"
+                },
+            {
+                "name": "DOMAINNAME",
+                "value": "[concat(toLower(resourceGroup().location), '.cloudapp.azure.com')]"
+                },
+            {
+                "name": "CLOUDINIT",
+                "value": "[variables('fileLink')]"
+                }
+        ],
+        "scriptContent": "#!/bin/bash\nset -e\ncurl -s $CLOUDINIT | sed \"s/{% set HOSTNAME = 'landscape' %}/{% set HOSTNAME = '$HOSTNAME' %}/\" | sed \"s/{% set DOMAIN = 'example.com' %}/{% set DOMAIN = '$DOMAINNAME' %}/\" | base64 | jq -R -s '{\"output\": .}' > $AZ_SCRIPTS_OUTPUT_PATH",
+        "azCliVersion": "2.9.1",
+        "arguments": "",
+        "retentionInterval": "PT1H",
+        "timeout": "PT30M",
+        "cleanupPreference": "Always"
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "apiVersion": "2021-02-01",
+      "name": "[concat(parameters('vmName'), 'PublicIP')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Standard"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[parameters('dnsPrefix')]"
+                    }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2021-02-01",
+            "name": "[concat(parameters('vmName'), 'NSG')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "Allow-HTTP",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "80",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Allow-HTTPS",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "443",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 101,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Allow-SSH",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 102,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2021-02-01",
+            "name": "[concat(parameters('vmName'), 'NIC')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('vmName'), 'NSG'))]",
+                "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('vmName'), 'PublicIP'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vSubnetName'))]"
+                            },
+                            "publicIpAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('vmName'), 'PublicIP'))]"
+                            }
+                        }
+                    }
+                ],
+                "networkSecurityGroup": {
+                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('vmName'), 'NSG'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2021-03-01",
+            "name": "[parameters('vmName')]",
+            "location": "[resourceGroup().location]",
+            "plan": {
+                    "name": "pro-22_04-lts-gen2",
+                    "product": "0001-com-ubuntu-pro-jammy",
+                    "publisher": "canonical"
+                },
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), 'NIC'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('vmName')]",
+                    "adminUsername": "[parameters('adminUsername')]",
+                    "customData":  "[reference(concat(parameters('vmName'), 'ComposeCloudInitFile')).outputs.output]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('adminUsername'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('sshPublicKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "Canonical",
+                        "offer": "0001-com-ubuntu-pro-jammy",
+                        "sku": "pro-22_04-lts-gen2",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(parameters('vmName'), 'NIC'))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "publicIpAddress": {
+            "type": "string",
+            "value": "[reference(concat(parameters('vmName'), 'PublicIP')).ipAddress]"
+        }
+    }
+}
