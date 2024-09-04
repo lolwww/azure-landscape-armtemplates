@@ -2,6 +2,7 @@
 ARM templates to deploy Landscape server
 
 Use it to deploy single-instance Landscape Server on Azure.
+
 Installs Landscape on VM with Public IP on it's NIC and Network security group with ports 80,443,22 open.
 
 Usage:
