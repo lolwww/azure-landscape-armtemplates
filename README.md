@@ -3,7 +3,7 @@
 [![Deploy To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Flolwww%2Fazure-landscape-armtemplates%2Fmain%2Flandscapeserver.json)
 
 
-Installs Landscape on VM with Public IP on it's NIC and Network security group with ports 80,443,22 open.
+Installs Landscape on Ubuntu Pro VM with Public IP on it's NIC and Network security group with ports 80,443,22 open.
 
 Usage:
 
