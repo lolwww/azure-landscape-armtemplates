@@ -5,15 +5,7 @@
 
 Installs Landscape on Ubuntu Pro VM with Public IP on it's NIC and Network security group with ports 80,443,22 open.
 
-Usage:
-
-Deploy (for now) with:
-
-https://portal.azure.com/#create/Microsoft.Template
-
-Then click "build template in the editor"
-
-Available params:
+Available parameters:
 
 - Azure region
 - VM size
